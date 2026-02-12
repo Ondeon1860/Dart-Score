@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Dart Zähler</title>
+    
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/825/825555.png">
+    
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --player-active: #0ea5e9;
+            --board-black: #111;
+            --board-white: #f1f5f9;
+            --board-red: #ef4444;
+            --board-green: #22c55e;
+            --text: #f8fafc;
+            --dart-slot: #334155;
+            --gold: #fcc419;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+        }
+
+        /* Orientierungs-Hinweis (nur im Spiel aktiv) */
+        #orientation-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg);
+            z-index: 9999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        @media (orientation: portrait) {
+            body.game-active #orientation-overlay {
+                display: flex;
+            }
+        }
+
+        #setup-screen {
+            background: var(--card);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .input-group { 
+            margin: 15px 0; text-align: left; background: #1e293b;
+            padding: 10px; border-radius: 10px; border: 1px solid #334155;
+        }
+        
+        .setup-player-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        label { display: block; color: var(--accent); font-weight: bold; }
+        select, input {
+            width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155;
+            background: #0f172a; color: white; font-size: 1rem; box-sizing: border-box;
+        }
+
+        /* Kamera & Fotos */
+        .camera-container { display: none; flex-direction: column; align-items: center; gap: 10px; margin-top: 10px; }
+        video { width: 100%; max-width: 200px; border-radius: 8px; background: #000; }
+        .preview-img { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); background: #334155; }
+
+        /* GAME SCREEN - Optimiert für Querformat */
+        #game-screen {
+            display: none; width: 100vw; height: 100vh;
+            position: fixed; top: 0; left: 0;
+            background: var(--bg);
+            padding: 10px;
+            box-sizing: border-box;
+            flex-direction: row; justify-content: space-around; align-items: center;
+            gap: 20px;
+        }
+
+        .board-side { flex: 1; max-height: 90vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .players-side { width: 350px; height: 90vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px; }
+
+        .player-card {
+            background: var(--card); padding: 10px; border-radius: 12px;
+            border-left: 6px solid transparent; transition: all 0.3s ease;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .player-card.active { border-left-color: var(--player-active); background: #2d3a4f; }
+        .player-photo { width: 60px; height: 60px; border-radius: 10px; object-fit: cover; background: #334155; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+        
+        .player-score { font-size: 2.2rem; font-weight: 800; color: var(--accent); margin: 0; line-height: 1; }
+        .checkout-text { color: var(--board-green); font-weight: bold; font-size: 0.8rem; min-height: 1rem; }
+        
+        .dart-badge { background: var(--dart-slot); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; border: 1px solid #475569; }
+
+        svg { height: 75vh; width: auto; max-width: 100%; cursor: pointer; }
+        path:hover { filter: brightness(1.4); stroke: white; stroke-width: 1px; }
+        .numbers { font-size: 18px; fill: white; pointer-events: none; text-anchor: middle; font-weight: bold; }
+
+        .btn { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; background: var(--accent); color: #000; }
+        .btn-small { padding: 5px 10px; font-size: 0.8rem; }
+        .btn-secondary { background: #475569; color: white; }
+        
+        #result-screen { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(15, 23, 42, 0.98); flex-direction: column; align-items: center; 
+            justify-content: center; z-index: 1000; text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="orientation-overlay">
+        <div style="font-size: 50px;">🔄</div>
+        <h2>Bitte das Gerät drehen</h2>
+        <p>Das Spiel wird im Querformat gespielt.</p>
+    </div>
+
+    <div id="setup-screen">
+        <h1 style="color:var(--accent); margin-top:0;">🎯 Dart Zähler</h1>
+        <div class="input-group">
+            <label>Modus & Spieler</label>
+            <div style="display: flex; gap: 10px; margin-top: 5px;">
+                <select id="start-score"><option value="101">101</option><option value="301">301</option><option value="501" selected>501</option></select>
+                <select id="player-count"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select>
+            </div>
+        </div>
+        <div id="name-fields-container"></div>
+        <button class="btn" id="start-btn" style="width: 100%; margin-top: 10px; font-size: 1.2rem;">SPIEL STARTEN</button>
+    </div>
+
+    <div id="game-screen">
+        <div class="board-side">
+            <div id="current-info" style="font-size: 1.1rem; margin-bottom: 5px; font-weight: bold; color: var(--accent);">Game On!</div>
+            <svg viewBox="-250 -250 500 500" id="dartboard">
+                <circle cx="0" cy="0" r="245" fill="#000" />
+                <g id="segments-group"></g>
+                <g id="labels-group" class="numbers"></g>
+                <circle cx="0" cy="0" r="20" fill="var(--board-green)" id="bull-single" />
+                <circle cx="0" cy="0" r="9" fill="var(--board-red)" id="bull-double" />
+            </svg>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="btn btn-secondary btn-small" id="undo-btn">Rückgängig</button>
+                <button class="btn btn-secondary btn-small" onclick="location.reload()">Abbrechen</button>
+            </div>
+        </div>
+        <div id="players-display" class="players-side"></div>
+    </div>
+
+    <canvas id="photo-canvas" style="display:none;"></canvas>
+
+    <div id="result-screen">
+        <div class="winner-wrapper">
+            <div class="crown-icon">👑</div>
+            <div id="winner-photo-container"></div>
+        </div>
+        <h1 id="winner-title" style="color:var(--gold); font-size: 3rem; margin: 10px 0;">CHAMPION</h1>
+        <div id="stats-content" style="margin-bottom: 20px; font-size: 1.2rem; color: #cbd5e1;"></div>
+        <div style="display: flex; gap: 15px;">
+            <button class="btn" id="rematch-btn" style="background: var(--gold);">ERNEUT SPIELEN</button>
+            <button class="btn btn-secondary" onclick="location.reload()">HAUPTMENÜ</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let playersData = [];
+            let players = [];
+            let currentPlayerIndex = 0;
+            let dartsThrownInTurn = 0;
+            let currentTurnDarts = [];
+            let history = [];
+            let isProcessing = false;
+            let currentChampionName = null;
+
+            const boardValues = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+            const checkouts = { 170: "T20 T20 BULL", 167: "T20 T19 BULL", 164: "T20 T18 BULL", 161: "T20 T17 BULL", 160: "T20 T20 D20", 158: "T20 T20 D19", 157: "T20 T19 D20", 156: "T20 T20 D18", 155: "T20 T19 D19", 154: "T20 T18 D20", 144: "T20 T20 D12", 141: "T20 T15 D18", 121: "T20 T15 D8", 100: "T20 D20", 80: "T20 D10", 60: "S20 D20", 40: "D20", 32: "D16" };
+
+            const nameContainer = document.getElementById('name-fields-container');
+            const playerCountSelect = document.getElementById('player-count');
+            let stream = null;
+
+            window.clearPlaceholder = (input) => { if (input.value.startsWith("Spieler ")) input.value = ""; };
+
+            window.startCamera = async (playerIdx) => {
+                const camDiv = document.getElementById(`cam-ctrl-${playerIdx}`);
+                camDiv.style.display = 'flex';
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 400 } });
+                    document.getElementById(`video-${playerIdx}`).srcObject = stream;
+                } catch (err) { alert("Kamera-Fehler"); }
+            };
+
+            window.takePhoto = (playerIdx) => {
+                const video = document.getElementById(`video-${playerIdx}`);
+                const canvas = document.getElementById('photo-canvas');
+                canvas.width = 200; canvas.height = 200;
+                canvas.getContext('2d').drawImage(video, 0, 0, 200, 200);
+                const data = canvas.toDataURL('image/png');
+                document.getElementById(`img-preview-${playerIdx}`).src = data;
+                document.getElementById(`img-data-${playerIdx}`).value = data;
+                if (stream) stream.getTracks().forEach(t => t.stop());
+                document.getElementById(`cam-ctrl-${playerIdx}`).style.display = 'none';
+            };
+
+            function renderNameInputs() {
+                const count = parseInt(playerCountSelect.value);
+                nameContainer.innerHTML = '';
+                for (let i = 1; i <= count; i++) {
+                    nameContainer.innerHTML += `
+                        <div class="input-group">
+                            <div class="setup-player-header">
+                                <img src="" id="img-preview-${i}" class="preview-img" onerror="this.src='data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748b%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2%22/%3E%3Ccircle cx=%2212%22 cy=%227%22 r=%224%22/%3E%3C/svg%3E';">
+                                <input type="text" id="p${i}-name" value="Spieler ${i}" onclick="clearPlaceholder(this)" onfocus="clearPlaceholder(this)" style="flex:1">
+                                <button class="btn btn-small" onclick="startCamera(${i})">📷</button>
+                            </div>
+                            <input type="hidden" id="img-data-${i}" value="">
+                            <div id="cam-ctrl-${i}" class="camera-container"><video id="video-${i}" autoplay playsinline></video><button class="btn btn-small" onclick="takePhoto(${i})">FOTO</button></div>
+                        </div>`;
+                }
+            }
+            playerCountSelect.addEventListener('change', renderNameInputs);
+            renderNameInputs();
+
+            function initGame(isRematch = false) {
+                if (!isRematch) {
+                    playersData = [];
+                    currentChampionName = null;
+                    for (let i = 1; i <= parseInt(playerCountSelect.value); i++) {
+                        let nameVal = document.getElementById(`p${i}-name`).value;
+                        if(nameVal.trim() === "") nameVal = "Spieler " + i;
+                        playersData.push({ name: nameVal, photo: document.getElementById(`img-data-${i}`).value });
+                    }
+                }
+                const startScore = parseInt(document.getElementById('start-score').value);
+                players = playersData.map(pd => ({ ...pd, score: startScore, totalDarts: 0, scoredPointsTotal: 0 }));
+                currentPlayerIndex = 0; dartsThrownInTurn = 0; currentTurnDarts = []; history = []; isProcessing = false;
+                
+                // Wechsel in den Game-Modus (Aktiviert Orientierungs-Check)
+                document.body.classList.add('game-active');
+                document.getElementById('setup-screen').style.display = 'none';
+                document.getElementById('result-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'flex';
+                drawBoard(); updateUI();
+            }
+
+            document.getElementById('start-btn').onclick = () => initGame(false);
+            document.getElementById('rematch-btn').onclick = () => initGame(true);
+
+            function drawBoard() {
+                const segGroup = document.getElementById('segments-group');
+                const labGroup = document.getElementById('labels-group');
+                segGroup.innerHTML = ''; labGroup.innerHTML = '';
+                boardValues.forEach((val, i) => {
+                    const angle = (i * 18) - 99;
+                    const isEven = i % 2 === 0;
+                    createPath(segGroup, angle, val, 120, 185, isEven ? '#111' : '#eee', 1);
+                    createPath(segGroup, angle, val, 105, 120, isEven ? 'var(--board-red)' : 'var(--board-green)', 3);
+                    createPath(segGroup, angle, val, 20, 105, isEven ? '#111' : '#eee', 1);
+                    createPath(segGroup, angle, val, 185, 200, isEven ? 'var(--board-red)' : 'var(--board-green)', 2);
+                    const midAngle = (angle + 9) * Math.PI / 180;
+                    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    txt.setAttribute("x", 225 * Math.cos(midAngle)); txt.setAttribute("y", 225 * Math.sin(midAngle));
+                    txt.textContent = val; labGroup.appendChild(txt);
+                });
+                document.getElementById('bull-single').onclick = () => handleHit(25, 1, 'Bull');
+                document.getElementById('bull-double').onclick = () => handleHit(25, 2, 'DBull');
+            }
+
+            function createPath(group, angle, val, rIn, rOut, color, mult) {
+                const a1 = angle * Math.PI / 180, a2 = (angle + 18) * Math.PI / 180;
+                const d = `M ${rIn*Math.cos(a1)} ${rIn*Math.sin(a1)} L ${rOut*Math.cos(a1)} ${rOut*Math.sin(a1)} A ${rOut} ${rOut} 0 0 1 ${rOut*Math.cos(a2)} ${rOut*Math.sin(a2)} L ${rIn*Math.cos(a2)} ${rIn*Math.sin(a2)} A ${rIn} ${rIn} 0 0 0 ${rIn*Math.cos(a1)} ${rIn*Math.sin(a1)} Z`;
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", d); path.setAttribute("fill", color);
+                path.onclick = () => handleHit(val, mult, (mult===3?'T':mult===2?'D':'S')+val);
+                group.appendChild(path);
+            }
+
+            window.handleHit = function(val, mult, label) {
+                if (isProcessing || dartsThrownInTurn >= 3) return;
+                let p = players[currentPlayerIndex];
+                const pts = val * mult;
+                history.push(JSON.stringify({ players, currentPlayerIndex, dartsThrownInTurn, currentTurnDarts }));
+                currentTurnDarts.push(label);
+                p.totalDarts++;
+                
+                if (p.score - pts === 0 && mult === 2) { 
+                    p.score = 0; p.scoredPointsTotal += pts; 
+                    currentChampionName = p.name;
+                    showResults(p); return; 
+                } else if (p.score - pts < 2) { 
+                    document.getElementById('current-info').textContent = "BUST!";
+                    dartsThrownInTurn = 3; 
+                } else { 
+                    p.score -= pts; p.scoredPointsTotal += pts; 
+                    document.getElementById('current-info').textContent = `${p.name}: ${label}`;
+                    dartsThrownInTurn++;
+                }
+                updateUI();
+                if (dartsThrownInTurn >= 3) {
+                    isProcessing = true;
+                    setTimeout(() => {
+                        dartsThrownInTurn = 0; currentTurnDarts = [];
+                        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                        isProcessing = false; updateUI();
+                    }, 800);
+                }
+            };
+
+            function getCheckoutHint(score) {
+                if (score > 170 || score < 2 || [169, 168, 166, 165, 163, 162, 159].includes(score)) return "";
+                if (checkouts[score]) return "Check: " + checkouts[score];
+                if (score <= 40 && score % 2 === 0) return "Check: D" + (score / 2);
+                return "Finish";
+            }
+
+            function updateUI() {
+                const container = document.getElementById('players-display');
+                container.innerHTML = '';
+                players.forEach((p, i) => {
+                    const active = (i === currentPlayerIndex) ? 'active' : '';
+                    const hasCrown = (p.name === currentChampionName);
+                    const checkoutHint = (i === currentPlayerIndex) ? getCheckoutHint(p.score) : "";
+                    const darts = (i === currentPlayerIndex) ? currentTurnDarts.map(d => `<span class="dart-badge">${d}</span>`).join(' ') : '';
+                    container.innerHTML += `
+                        <div class="player-card ${active}">
+                            <div class="photo-wrapper">
+                                ${hasCrown ? '<div class="crown-icon" style="font-size:16px; top:-10px;">👑</div>' : ''}
+                                <div class="player-photo">
+                                    ${p.photo ? `<img src="${p.photo}" style="width:100%; height:100%; object-fit:cover;">` : `👤`}
+                                </div>
+                            </div>
+                            <div style="flex:1">
+                                <div style="font-size:0.9rem">${p.name}</div>
+                                <div class="player-score">${p.score}</div>
+                                <div class="checkout-text">${checkoutHint}</div>
+                                <div style="margin-top:2px;">${darts}</div>
+                            </div>
+                        </div>`;
+                });
+            }
+
+            function showResults(w) {
+                document.body.classList.remove('game-active');
+                document.getElementById('game-screen').style.display='none';
+                document.getElementById('result-screen').style.display='flex';
+                document.getElementById('winner-photo-container').innerHTML = w.photo 
+                    ? `<img src="${w.photo}" style="width:150px;height:150px;border-radius:20px;border:4px solid var(--gold);object-fit:cover;">` 
+                    : `<div style="width:150px;height:150px;border-radius:20px;border:4px solid var(--gold);background:#334155;display:flex;align-items:center;justify-content:center;font-size:4rem;">👤</div>`;
+                document.getElementById('winner-title').innerHTML = `👑 ${w.name.toUpperCase()} 👑`;
+                document.getElementById('stats-content').innerHTML = `Average: ${(w.scoredPointsTotal/w.totalDarts*3).toFixed(2)} | Darts: ${w.totalDarts}`;
+            }
+
+            document.getElementById('undo-btn').onclick = () => {
+                if (isProcessing || history.length === 0) return;
+                const last = JSON.parse(history.pop());
+                players = last.players; currentPlayerIndex = last.currentPlayerIndex;
+                dartsThrownInTurn = last.dartsThrownInTurn; currentTurnDarts = last.currentTurnDarts;
+                updateUI();
+            };
+        });
+    </script>
+</body>
+</html>
